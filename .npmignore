@@ -1,0 +1,44 @@
+# Source files (exclude from all subdirectories)
+**/*.ts
+!**/*.d.ts
+**/*.map
+tsconfig.json
+gulpfile.js
+
+# Documentation (internal)
+README.md
+DEVELOPMENT.md
+PUBLISH.md
+USAGE_EXAMPLES.md
+
+# Development files
+.eslintrc.js
+.prettierrc
+.editorconfig
+
+# Git files
+.git
+.gitignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Documentation (source)
+docs/
+
+# Testing
+*.test.js
+*.spec.js
+test/
+tests/
+coverage/
+
+# Editor files
+.vscode/
+.idea/
+
+# Misc
+.DS_Store
+*.log
+node_modules/

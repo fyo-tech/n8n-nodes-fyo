@@ -1,0 +1,72 @@
+{
+  "name": "n8n-nodes-fyo",
+  "version": "0.1.0-beta",
+  "description": "n8n community node for FYO API integration - Grains, Finance and AFIP operations",
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "fyo",
+    "grains",
+    "agriculture",
+    "finance",
+    "afip",
+    "argentina"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/fyo-tech/n8n-nodes-fyo#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fyo-tech/n8n-nodes-fyo.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fyo-tech/n8n-nodes-fyo/issues"
+  },
+  "author": {
+    "name": "FYO Tech",
+    "email": "integracion@fyo.com",
+    "url": "https://www.fyo.com"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "npm@10.2.4",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc && gulp build:icons",
+    "dev": "tsc --watch",
+    "format": "prettier nodes credentials --write",
+    "lint": "eslint nodes credentials package.json",
+    "lintfix": "eslint nodes credentials package.json --fix",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "credentials/**/*.js",
+    "credentials/**/*.d.ts",
+    "nodes/**/*.js",
+    "nodes/**/*.d.ts",
+    "nodes/**/*.svg"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "credentials/FyoApi.credentials.js"
+    ],
+    "nodes": [
+      "nodes/Fyo/Fyo.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.56.0",
+    "eslint-plugin-n8n-nodes-base": "^1.16.1",
+    "gulp": "^4.0.2",
+    "n8n-workflow": "*",
+    "prettier": "^3.2.0",
+    "typescript": "^5.3.0"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
+}
