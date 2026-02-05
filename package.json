@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-fyo",
-  "version": "0.5.1-beta",
+  "version": "0.5.1",
   "description": "n8n community node for FYO API integration - Grains, Finance and AFIP operations",
   "keywords": [
     "n8n-community-node-package",
