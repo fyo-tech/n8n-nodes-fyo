@@ -1,4 +1,5 @@
 import type {
+	ICredentialTestRequest,
 	ICredentialType,
 	INodeProperties,
 } from 'n8n-workflow';
@@ -7,7 +8,6 @@ export class FyoApi implements ICredentialType {
 	name = 'fyoApi';
 	displayName = 'FYO API';
 	documentationUrl = 'https://api.fyo.com/docs';
-	testedBy = 'fyoApiCredentialTest';
 	properties: INodeProperties[] = [
 		{
 			displayName: 'Client ID',
@@ -80,4 +80,33 @@ export class FyoApi implements ICredentialType {
 			description: 'Custom API base URL (e.g., http://localhost:3000)',
 		},
 	];
+
+	test: ICredentialTestRequest = {
+		request: {
+			baseURL: '={{ $credentials.environment === "custom" ? $credentials.customUrl : ($credentials.environment === "demo" ? "https://demoapi.fyo.com" : "https://api.fyo.com") }}',
+			url: '/token',
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/x-www-form-urlencoded',
+			},
+			body: {
+				client_id: '={{$credentials.clientId}}',
+				username: '={{$credentials.username}}',
+				password: '={{$credentials.password}}',
+				scope: '={{$credentials.scope}}',
+				grant_type: 'password',
+				response_type: 'token id_token',
+			},
+		},
+		rules: [
+			{
+				type: 'responseSuccessBody',
+				properties: {
+					key: 'access_token',
+					value: undefined,
+					message: 'Invalid credentials - no access token received',
+				},
+			},
+		],
+	};
 }

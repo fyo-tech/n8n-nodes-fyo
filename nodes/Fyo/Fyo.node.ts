@@ -5,9 +5,6 @@ import type {
 	INodeTypeDescription,
 	IHttpRequestOptions,
 	IDataObject,
-	ICredentialTestFunctions,
-	INodeCredentialTestResult,
-	ICredentialsDecrypted,
 } from 'n8n-workflow';
 import { NodeApiError } from 'n8n-workflow';
 
@@ -1025,74 +1022,6 @@ export class Fyo implements INodeType {
 			},
 
 		],
-	};
-
-	methods = {
-		credentialTest: {
-			async fyoApiCredentialTest(
-				this: ICredentialTestFunctions,
-				credential: ICredentialsDecrypted,
-			): Promise<INodeCredentialTestResult> {
-				const credentials = credential.data as IDataObject;
-
-				const environment = credentials.environment as string;
-				let baseUrl: string;
-
-				if (environment === 'custom') {
-					baseUrl = credentials.customUrl as string;
-				} else if (environment === 'demo') {
-					baseUrl = 'https://demoapi.fyo.com';
-				} else {
-					baseUrl = 'https://api.fyo.com';
-				}
-
-				const requestOptions = {
-					method: 'POST',
-					uri: `${baseUrl}/token`,
-					headers: {
-						'Content-Type': 'application/x-www-form-urlencoded',
-					},
-					form: {
-						client_id: credentials.clientId as string,
-						username: credentials.username as string,
-						password: credentials.password as string,
-						scope: credentials.scope as string,
-						grant_type: 'password',
-						response_type: 'token id_token',
-					},
-					json: true,
-				};
-
-				try {
-					const response = await this.helpers.request(requestOptions);
-
-					if (response.error) {
-						return {
-							status: 'Error',
-							message: response.error_description || response.error,
-						};
-					}
-
-					if (!response.access_token) {
-						return {
-							status: 'Error',
-							message: 'Invalid credentials - no access token received',
-						};
-					}
-
-					return {
-						status: 'OK',
-						message: 'Connection successful',
-					};
-				} catch (error) {
-					const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-					return {
-						status: 'Error',
-						message: errorMessage,
-					};
-				}
-			},
-		},
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
