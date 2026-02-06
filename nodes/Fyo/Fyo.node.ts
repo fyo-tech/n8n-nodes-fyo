@@ -5,6 +5,9 @@ import type {
 	INodeTypeDescription,
 	IHttpRequestOptions,
 	IDataObject,
+	ICredentialTestFunctions,
+	INodeCredentialTestResult,
+	ICredentialsDecrypted,
 } from 'n8n-workflow';
 import { NodeApiError } from 'n8n-workflow';
 
@@ -51,6 +54,15 @@ function validateDate(dateString: string, fieldName: string): string {
 		);
 	}
 
+	// Check if the date is not in the future
+	const today = new Date();
+	today.setHours(0, 0, 0, 0);
+	if (date > today) {
+		throw new Error(
+			`Invalid date "${fieldName}": "${formatted}" cannot be greater than today's date.`
+		);
+	}
+
 	return formatted;
 }
 
@@ -85,6 +97,15 @@ function getMonthName(month: number): string {
 		'July', 'August', 'September', 'October', 'November', 'December'
 	];
 	return months[month - 1] || 'Unknown';
+}
+
+// Helper function to validate required numeric fields
+function validateRequiredNumber(value: number | string, fieldName: string): number {
+	const num = typeof value === 'string' ? parseInt(value, 10) : value;
+	if (!num || num <= 0 || isNaN(num)) {
+		throw new Error(`${fieldName} must be a valid number greater than 0`);
+	}
+	return num;
 }
 
 // Token cache: key = baseUrl+clientId+username, value = {token, expiresAt}
@@ -926,106 +947,13 @@ export class Fyo implements INodeType {
 				},
 				options: [
 					{
-						name: 'Get Settlements',
-						value: 'getLiquidacionesAfip',
-						description: 'Retrieve AFIP settlements',
-						action: 'Get settlements',
-					},
-					{
 						name: 'Get Waybills',
 						value: 'getCartaPorte',
 						description: 'Retrieve AFIP waybills (Carta de Porte)',
 						action: 'Get waybills',
 					},
 				],
-				default: 'getLiquidacionesAfip',
-			},
-
-			// ========== AFIP - LIQUIDACIONES ==========
-			{
-				displayName: 'Search By',
-				name: 'searchTypeAfipLiq',
-				type: 'options',
-				displayOptions: {
-					show: {
-						resource: ['afip'],
-						operation: ['getLiquidacionesAfip'],
-					},
-				},
-				options: [
-					{
-						name: 'Date Range',
-						value: 'byDates',
-					},
-					{
-						name: 'Receipt Number',
-						value: 'byReceiptNumber',
-					},
-					{
-						name: 'Contract Number',
-						value: 'byContractNumber',
-					},
-				],
-				default: 'byDates',
-			},
-			{
-				displayName: 'Date From',
-				name: 'fechaDesdeAfipLiq',
-				type: 'dateTime',
-				displayOptions: {
-					show: {
-						resource: ['afip'],
-						operation: ['getLiquidacionesAfip'],
-						searchTypeAfipLiq: ['byDates'],
-					},
-				},
-				default: '',
-				required: true,
-				description: 'Start date for the search range (max 1 month range)',
-			},
-			{
-				displayName: 'Date To',
-				name: 'fechaHastaAfipLiq',
-				type: 'dateTime',
-				displayOptions: {
-					show: {
-						resource: ['afip'],
-						operation: ['getLiquidacionesAfip'],
-						searchTypeAfipLiq: ['byDates'],
-					},
-				},
-				default: '',
-				description: 'End date for the search range (optional, max 1 month from start)',
-			},
-			{
-				displayName: 'Receipt Number',
-				name: 'numeroComprobanteAfip',
-				type: 'number',
-				displayOptions: {
-					show: {
-						resource: ['afip'],
-						operation: ['getLiquidacionesAfip'],
-						searchTypeAfipLiq: ['byReceiptNumber'],
-					},
-				},
-				default: '',
-				required: true,
-				description: 'The receipt number',
-			},
-			{
-				displayName: 'Contract Number',
-				name: 'numeroContratoAfip',
-				type: 'number',
-				displayOptions: {
-					show: {
-						resource: ['afip'],
-						operation: ['getLiquidacionesAfip'],
-						searchTypeAfipLiq: ['byContractNumber'],
-					},
-				},
-				default: '',
-				required: true,
-				description: 'The contract number',
+				default: 'getCartaPorte',
 			},
 
 			// ========== AFIP - CARTA DE PORTE ==========
@@ -1099,6 +1027,74 @@ export class Fyo implements INodeType {
 		],
 	};
 
+	methods = {
+		credentialTest: {
+			async fyoApiCredentialTest(
+				this: ICredentialTestFunctions,
+				credential: ICredentialsDecrypted,
+			): Promise<INodeCredentialTestResult> {
+				const credentials = credential.data as IDataObject;
+
+				const environment = credentials.environment as string;
+				let baseUrl: string;
+
+				if (environment === 'custom') {
+					baseUrl = credentials.customUrl as string;
+				} else if (environment === 'demo') {
+					baseUrl = 'https://demoapi.fyo.com';
+				} else {
+					baseUrl = 'https://api.fyo.com';
+				}
+
+				const requestOptions = {
+					method: 'POST',
+					uri: `${baseUrl}/token`,
+					headers: {
+						'Content-Type': 'application/x-www-form-urlencoded',
+					},
+					form: {
+						client_id: credentials.clientId as string,
+						username: credentials.username as string,
+						password: credentials.password as string,
+						scope: credentials.scope as string,
+						grant_type: 'password',
+						response_type: 'token id_token',
+					},
+					json: true,
+				};
+
+				try {
+					const response = await this.helpers.request(requestOptions);
+
+					if (response.error) {
+						return {
+							status: 'Error',
+							message: response.error_description || response.error,
+						};
+					}
+
+					if (!response.access_token) {
+						return {
+							status: 'Error',
+							message: 'Invalid credentials - no access token received',
+						};
+					}
+
+					return {
+						status: 'OK',
+						message: 'Connection successful',
+					};
+				} catch (error) {
+					const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+					return {
+						status: 'Error',
+						message: errorMessage,
+					};
+				}
+			},
+		},
+	};
+
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
@@ -1133,7 +1129,7 @@ export class Fyo implements INodeType {
 							body.fechaContratoDesde = fechaDesde;
 							if (fechaHasta) body.fechaContratoHasta = fechaHasta;
 						} else {
-							body.numeroContratoCorredor = this.getNodeParameter('numeroContratoCorredor', i) as number;
+							body.numeroContratoCorredor = validateRequiredNumber(this.getNodeParameter('numeroContratoCorredor', i) as number, 'Broker Contract Number');
 						}
 					} else if (operation === 'getLiquidaciones') {
 						endpoint = '/granos/liquidaciones';
@@ -1145,9 +1141,9 @@ export class Fyo implements INodeType {
 							body.fechaDesde = fechaDesde;
 							if (fechaHasta) body.fechaHasta = fechaHasta;
 						} else if (searchType === 'byContractNumber') {
-							body.numeroContratoCorredor = this.getNodeParameter('numeroContratoCorredorLiq', i) as number;
+							body.numeroContratoCorredor = validateRequiredNumber(this.getNodeParameter('numeroContratoCorredorLiq', i) as number, 'Broker Contract Number');
 						} else {
-							body.numeroComprobante = this.getNodeParameter('numeroComprobanteLiq', i) as number;
+							body.numeroComprobante = validateRequiredNumber(this.getNodeParameter('numeroComprobanteLiq', i) as number, 'Receipt Number');
 						}
 					} else if (operation === 'getFacturas') {
 						endpoint = '/granos/facturas';
@@ -1159,9 +1155,9 @@ export class Fyo implements INodeType {
 							body.fechaDesde = fechaDesde;
 							if (fechaHasta) body.fechaHasta = fechaHasta;
 						} else if (searchType === 'byContractNumber') {
-							body.numeroContratoCorredor = this.getNodeParameter('numeroContratoCorredorFact', i) as number;
+							body.numeroContratoCorredor = validateRequiredNumber(this.getNodeParameter('numeroContratoCorredorFact', i) as number, 'Broker Contract Number');
 						} else {
-							body.numeroComprobante = this.getNodeParameter('numeroComprobanteFact', i) as number;
+							body.numeroComprobante = validateRequiredNumber(this.getNodeParameter('numeroComprobanteFact', i) as number, 'Receipt Number');
 						}
 					} else if (operation === 'getAplicaciones') {
 						endpoint = '/granos/aplicaciones';
@@ -1173,9 +1169,9 @@ export class Fyo implements INodeType {
 							body.fechaAplicacionDesde = fechaDesde;
 							if (fechaHasta) body.fechaAplicacionHasta = fechaHasta;
 						} else if (searchType === 'byContractNumber') {
-							body.numeroContratoCorredor = this.getNodeParameter('numeroContratoCorredorApl', i) as number;
+							body.numeroContratoCorredor = validateRequiredNumber(this.getNodeParameter('numeroContratoCorredorApl', i) as number, 'Broker Contract Number');
 						} else if (searchType === 'byCTG') {
-							body.CTG = this.getNodeParameter('CTG', i) as number;
+							body.CTG = validateRequiredNumber(this.getNodeParameter('CTG', i) as number, 'CTG Number');
 						}
 					} else if (operation === 'getFijaciones') {
 						endpoint = '/granos/fijaciones';
@@ -1187,9 +1183,9 @@ export class Fyo implements INodeType {
 							body.fechaFijacionDesde = fechaDesde;
 							if (fechaHasta) body.fechaFijacionHasta = fechaHasta;
 						} else if (searchType === 'byContractNumber') {
-							body.numeroContratoCorredor = this.getNodeParameter('numeroContratoCorredorFij', i) as number;
+							body.numeroContratoCorredor = validateRequiredNumber(this.getNodeParameter('numeroContratoCorredorFij', i) as number, 'Broker Contract Number');
 						} else {
-							body.numeroFijacion = this.getNodeParameter('numeroFijacion', i) as number;
+							body.numeroFijacion = validateRequiredNumber(this.getNodeParameter('numeroFijacion', i) as number, 'Fixing Number');
 						}
 					} else if (operation === 'getDescargas') {
 						endpoint = '/granos/descargas';
@@ -1201,7 +1197,7 @@ export class Fyo implements INodeType {
 							body.fechaDesde = fechaDesde;
 							if (fechaHasta) body.fechaHasta = fechaHasta;
 						} else if (searchType === 'byCTG') {
-							body.numeroCTG = this.getNodeParameter('numeroCTG', i) as number;
+							body.numeroCTG = validateRequiredNumber(this.getNodeParameter('numeroCTG', i) as number, 'CTG Number');
 						}
 					} else if (operation === 'getRetenciones') {
 						endpoint = '/granos/retenciones';
@@ -1213,9 +1209,9 @@ export class Fyo implements INodeType {
 							body.fechaDesde = fechaDesde;
 							if (fechaHasta) body.fechaHasta = fechaHasta;
 						} else if (searchType === 'byReceiptNumber') {
-							body.numeroComprobante = this.getNodeParameter('numeroComprobanteRet', i) as number;
+							body.numeroComprobante = validateRequiredNumber(this.getNodeParameter('numeroComprobanteRet', i) as number, 'Receipt Number');
 						} else {
-							body.numeroMinutaPago = this.getNodeParameter('numeroMinutaPago', i) as number;
+							body.numeroMinutaPago = validateRequiredNumber(this.getNodeParameter('numeroMinutaPago', i) as number, 'Payment Slip Number');
 						}
 					}
 				}
@@ -1239,7 +1235,7 @@ export class Fyo implements INodeType {
 						responseData = await this.helpers.httpRequest(options);
 					} else if (operation === 'getDetallesComprobante') {
 						endpoint = '/finanzas/extranet/detallescomprobante';
-						body.numeroComprobante = this.getNodeParameter('numeroComprobanteFin', i) as number;
+						body.numeroComprobante = validateRequiredNumber(this.getNodeParameter('numeroComprobanteFin', i) as number, 'Receipt Number');
 					} else if (operation === 'getMovimientos') {
 						endpoint = '/finanzas/extranet/movimientos';
 						const fechaDesde = validateDate(this.getNodeParameter('fechaDesdeFin', i) as string, 'Date From');
@@ -1247,6 +1243,7 @@ export class Fyo implements INodeType {
 						validateDateRange(fechaDesde, fechaHasta);
 						body.fechaDesde = fechaDesde;
 						body.fechaHasta = fechaHasta;
+						body.pageSize = 1000;
 					}
 				}
 
@@ -1254,31 +1251,16 @@ export class Fyo implements INodeType {
 				// AFIP
 				// ====================
 				if (resource === 'afip') {
-					if (operation === 'getLiquidacionesAfip') {
-						endpoint = '/afip/liquidaciones';
-						const searchType = this.getNodeParameter('searchTypeAfipLiq', i) as string;
-						if (searchType === 'byDates') {
-							const fechaDesde = validateDate(this.getNodeParameter('fechaDesdeAfipLiq', i) as string, 'Date From');
-							const fechaHasta = validateDate(this.getNodeParameter('fechaHastaAfipLiq', i) as string, 'Date To');
-							if (fechaHasta) validateDateRange(fechaDesde, fechaHasta);
-							body.fechaDesde = fechaDesde;
-							if (fechaHasta) body.fechaHasta = fechaHasta;
-						} else if (searchType === 'byReceiptNumber') {
-							body.numeroComprobante = this.getNodeParameter('numeroComprobanteAfip', i) as number;
-						} else {
-							body.numeroContrato = this.getNodeParameter('numeroContratoAfip', i) as number;
-						}
-					} else if (operation === 'getCartaPorte') {
+					if (operation === 'getCartaPorte') {
 						endpoint = '/afip/cartaporte';
 						const searchType = this.getNodeParameter('searchTypeCartaPorte', i) as string;
 						if (searchType === 'byDates') {
 							const fechaDesde = validateDate(this.getNodeParameter('fechaDescargaDesde', i) as string, 'Unload Date From');
 							const fechaHasta = validateDate(this.getNodeParameter('fechaDescargaHasta', i) as string, 'Unload Date To');
-							if (fechaHasta) validateDateRange(fechaDesde, fechaHasta);
 							body.fechaDescargaDesde = fechaDesde;
 							if (fechaHasta) body.fechaDescargaHasta = fechaHasta;
 						} else {
-							body.nroCTG = this.getNodeParameter('nroCTG', i) as number;
+							body.nroCTG = validateRequiredNumber(this.getNodeParameter('nroCTG', i) as number, 'CTG Number');
 						}
 					}
 				}
