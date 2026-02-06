@@ -8,6 +8,103 @@ import type {
 } from 'n8n-workflow';
 import { NodeApiError } from 'n8n-workflow';
 
+// Helper function to convert dateTime to YYYY-MM-DD format
+function formatDateForApi(dateValue: string): string {
+	if (!dateValue) return '';
+
+	// If already in YYYY-MM-DD format, return as is
+	if (/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+		return dateValue;
+	}
+
+	// Parse ISO datetime or other formats
+	const date = new Date(dateValue);
+	if (isNaN(date.getTime())) {
+		throw new Error(`Invalid date value: "${dateValue}"`);
+	}
+
+	const year = date.getFullYear();
+	const month = String(date.getMonth() + 1).padStart(2, '0');
+	const day = String(date.getDate()).padStart(2, '0');
+
+	return `${year}-${month}-${day}`;
+}
+
+// Helper function to validate date existence
+function validateDate(dateString: string, fieldName: string): string {
+	if (!dateString) return '';
+
+	const formatted = formatDateForApi(dateString);
+	const [year, month, day] = formatted.split('-').map(Number);
+
+	// Check if the date actually exists
+	const date = new Date(year, month - 1, day);
+	if (
+		date.getFullYear() !== year ||
+		date.getMonth() !== month - 1 ||
+		date.getDate() !== day
+	) {
+		const lastDayOfMonth = new Date(year, month, 0).getDate();
+		throw new Error(
+			`Invalid date "${fieldName}": "${formatted}" does not exist. ` +
+			`${getMonthName(month)} ${year} has ${lastDayOfMonth} days.`
+		);
+	}
+
+	// Check if the date is not in the future
+	const today = new Date();
+	today.setHours(0, 0, 0, 0);
+	if (date > today) {
+		throw new Error(
+			`Invalid date "${fieldName}": "${formatted}" cannot be greater than today's date.`
+		);
+	}
+
+	return formatted;
+}
+
+// Helper function to validate date range (max 1 month)
+function validateDateRange(dateFrom: string, dateTo: string): void {
+	if (!dateFrom || !dateTo) return;
+
+	const from = new Date(dateFrom);
+	const to = new Date(dateTo);
+
+	if (to < from) {
+		throw new Error(`Date range invalid: "Date To" (${dateTo}) cannot be before "Date From" (${dateFrom})`);
+	}
+
+	// Calculate difference in days
+	const diffTime = to.getTime() - from.getTime();
+	const diffDays = diffTime / (1000 * 60 * 60 * 24);
+
+	// Max 31 days (approximately 1 month)
+	if (diffDays > 31) {
+		throw new Error(
+			`Date range exceeds maximum allowed (1 month). ` +
+			`From "${dateFrom}" to "${dateTo}" is ${Math.ceil(diffDays)} days. ` +
+			`Please reduce the date range to 31 days or less.`
+		);
+	}
+}
+
+function getMonthName(month: number): string {
+	const months = [
+		'January', 'February', 'March', 'April', 'May', 'June',
+		'July', 'August', 'September', 'October', 'November', 'December'
+	];
+	return months[month - 1] || 'Unknown';
+}
+
+// Helper function to validate required numeric fields
+function validateRequiredNumber(value: number | string, fieldName: string): number {
+	const num = typeof value === 'string' ? parseInt(value, 10) : value;
+	if (!num || num <= 0 || isNaN(num)) {
+		throw new Error(`${fieldName} must be a valid number greater than 0`);
+	}
+	return num;
+}
+
 // Token cache: key = baseUrl+clientId+username, value = {token, expiresAt}
 interface TokenCacheEntry {
 	token: string;
@@ -77,7 +174,7 @@ async function getAccessToken(
 
 export class Fyo implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'FYO',
+		displayName: 'FyO',
 		name: 'fyo',
 		icon: 'file:fyo.svg',
 		group: ['transform'],
@@ -85,7 +182,7 @@ export class Fyo implements INodeType {
 		subtitle: '={{$parameter["operation"]}}',
 		description: 'Interact with FYO API',
 		defaults: {
-			name: 'FYO',
+			name: 'FyO',
 		},
 		inputs: ['main'],
 		outputs: ['main'],
@@ -196,16 +293,16 @@ export class Fyo implements INodeType {
 						value: 'byDates',
 					},
 					{
-						name: 'Contract Number',
+						name: 'Broker Contract Number',
 						value: 'byContractNumber',
 					},
 				],
 				default: 'byDates',
 			},
 			{
-				displayName: 'Contract Date From',
+				displayName: 'Date From',
 				name: 'fechaContratoDesde',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['granos'],
@@ -215,13 +312,12 @@ export class Fyo implements INodeType {
 				},
 				default: '',
 				required: true,
-				placeholder: '2024-01-01',
-				description: 'Start date in YYYY-MM-DD format',
+				description: 'Start date for the search range (max 1 month range)',
 			},
 			{
-				displayName: 'Contract Date To',
+				displayName: 'Date To',
 				name: 'fechaContratoHasta',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['granos'],
@@ -230,8 +326,7 @@ export class Fyo implements INodeType {
 					},
 				},
 				default: '',
-				placeholder: '2024-12-31',
-				description: 'End date in YYYY-MM-DD format (optional)',
+				description: 'End date for the search range (optional, max 1 month from start)',
 			},
 			{
 				displayName: 'Broker Contract Number',
@@ -279,7 +374,7 @@ export class Fyo implements INodeType {
 			{
 				displayName: 'Date From',
 				name: 'fechaDesdeLiq',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['granos'],
@@ -289,13 +384,12 @@ export class Fyo implements INodeType {
 				},
 				default: '',
 				required: true,
-				placeholder: '2024-01-01',
-				description: 'Start date in YYYY-MM-DD format',
+				description: 'Start date for the search range (max 1 month range)',
 			},
 			{
 				displayName: 'Date To',
 				name: 'fechaHastaLiq',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['granos'],
@@ -304,8 +398,7 @@ export class Fyo implements INodeType {
 					},
 				},
 				default: '',
-				placeholder: '2024-12-31',
-				description: 'End date in YYYY-MM-DD format (optional)',
+				description: 'End date for the search range (optional, max 1 month from start)',
 			},
 			{
 				displayName: 'Broker Contract Number',
@@ -368,7 +461,7 @@ export class Fyo implements INodeType {
 			{
 				displayName: 'Date From',
 				name: 'fechaDesdeFact',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['granos'],
@@ -378,13 +471,12 @@ export class Fyo implements INodeType {
 				},
 				default: '',
 				required: true,
-				placeholder: '2024-01-01',
-				description: 'Start date in YYYY-MM-DD format',
+				description: 'Start date for the search range (max 1 month range)',
 			},
 			{
 				displayName: 'Date To',
 				name: 'fechaHastaFact',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['granos'],
@@ -393,8 +485,7 @@ export class Fyo implements INodeType {
 					},
 				},
 				default: '',
-				placeholder: '2024-12-31',
-				description: 'End date in YYYY-MM-DD format (optional)',
+				description: 'End date for the search range (optional, max 1 month from start)',
 			},
 			{
 				displayName: 'Broker Contract Number',
@@ -451,17 +542,13 @@ export class Fyo implements INodeType {
 						name: 'CTG Number',
 						value: 'byCTG',
 					},
-					{
-						name: 'Fixing Number',
-						value: 'byFixingNumber',
-					},
 				],
 				default: 'byDates',
 			},
 			{
-				displayName: 'Application Date From',
+				displayName: 'Date From',
 				name: 'fechaAplicacionDesde',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['granos'],
@@ -471,13 +558,12 @@ export class Fyo implements INodeType {
 				},
 				default: '',
 				required: true,
-				placeholder: '2024-01-01',
-				description: 'Start date in YYYY-MM-DD format',
+				description: 'Start date for the search range (max 1 month range)',
 			},
 			{
-				displayName: 'Application Date To',
+				displayName: 'Date To',
 				name: 'fechaAplicacionHasta',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['granos'],
@@ -486,8 +572,7 @@ export class Fyo implements INodeType {
 					},
 				},
 				default: '',
-				placeholder: '2024-12-31',
-				description: 'End date in YYYY-MM-DD format (optional)',
+				description: 'End date for the search range (optional, max 1 month from start)',
 			},
 			{
 				displayName: 'Broker Contract Number',
@@ -519,21 +604,6 @@ export class Fyo implements INodeType {
 				required: true,
 				description: 'The CTG number',
 			},
-			{
-				displayName: 'Fixing Number',
-				name: 'numeroFijacionApl',
-				type: 'number',
-				displayOptions: {
-					show: {
-						resource: ['granos'],
-						operation: ['getAplicaciones'],
-						searchTypeAplicaciones: ['byFixingNumber'],
-					},
-				},
-				default: '',
-				required: true,
-				description: 'The fixing number',
-			},
 
 			// ========== GRANOS - FIJACIONES ==========
 			{
@@ -563,9 +633,9 @@ export class Fyo implements INodeType {
 				default: 'byDates',
 			},
 			{
-				displayName: 'Fixing Date From',
+				displayName: 'Date From',
 				name: 'fechaFijacionDesde',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['granos'],
@@ -575,13 +645,12 @@ export class Fyo implements INodeType {
 				},
 				default: '',
 				required: true,
-				placeholder: '2024-01-01',
-				description: 'Start date in YYYY-MM-DD format',
+				description: 'Start date for the search range (max 1 month range)',
 			},
 			{
-				displayName: 'Fixing Date To',
+				displayName: 'Date To',
 				name: 'fechaFijacionHasta',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['granos'],
@@ -590,8 +659,7 @@ export class Fyo implements INodeType {
 					},
 				},
 				default: '',
-				placeholder: '2024-12-31',
-				description: 'End date in YYYY-MM-DD format (optional)',
+				description: 'End date for the search range (optional, max 1 month from start)',
 			},
 			{
 				displayName: 'Broker Contract Number',
@@ -644,17 +712,13 @@ export class Fyo implements INodeType {
 						name: 'CTG Number',
 						value: 'byCTG',
 					},
-					{
-						name: 'Broker Contract Number',
-						value: 'byContractNumber',
-					},
 				],
 				default: 'byDates',
 			},
 			{
 				displayName: 'Date From',
 				name: 'fechaDesdeDesc',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['granos'],
@@ -664,13 +728,12 @@ export class Fyo implements INodeType {
 				},
 				default: '',
 				required: true,
-				placeholder: '2024-01-01',
-				description: 'Start date in YYYY-MM-DD format',
+				description: 'Start date for the search range (max 1 month range)',
 			},
 			{
 				displayName: 'Date To',
 				name: 'fechaHastaDesc',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['granos'],
@@ -679,8 +742,7 @@ export class Fyo implements INodeType {
 					},
 				},
 				default: '',
-				placeholder: '2024-12-31',
-				description: 'End date in YYYY-MM-DD format (optional)',
+				description: 'End date for the search range (optional, max 1 month from start)',
 			},
 			{
 				displayName: 'CTG Number',
@@ -696,21 +758,6 @@ export class Fyo implements INodeType {
 				default: '',
 				required: true,
 				description: 'The CTG number',
-			},
-			{
-				displayName: 'Broker Contract Number',
-				name: 'numeroContratoCorredorDesc',
-				type: 'number',
-				displayOptions: {
-					show: {
-						resource: ['granos'],
-						operation: ['getDescargas'],
-						searchTypeDescargas: ['byContractNumber'],
-					},
-				},
-				default: '',
-				required: true,
-				description: 'The broker contract number',
 			},
 
 			// ========== GRANOS - RETENCIONES ==========
@@ -743,7 +790,7 @@ export class Fyo implements INodeType {
 			{
 				displayName: 'Date From',
 				name: 'fechaDesdeRet',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['granos'],
@@ -753,13 +800,12 @@ export class Fyo implements INodeType {
 				},
 				default: '',
 				required: true,
-				placeholder: '2024-01-01',
-				description: 'Start date in YYYY-MM-DD format',
+				description: 'Start date for the search range (max 1 month range)',
 			},
 			{
 				displayName: 'Date To',
 				name: 'fechaHastaRet',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['granos'],
@@ -768,8 +814,7 @@ export class Fyo implements INodeType {
 					},
 				},
 				default: '',
-				placeholder: '2024-12-31',
-				description: 'End date in YYYY-MM-DD format (optional)',
+				description: 'End date for the search range (optional, max 1 month from start)',
 			},
 			{
 				displayName: 'Receipt Number',
@@ -858,7 +903,7 @@ export class Fyo implements INodeType {
 			{
 				displayName: 'Date From',
 				name: 'fechaDesdeFin',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['finanzas'],
@@ -867,13 +912,12 @@ export class Fyo implements INodeType {
 				},
 				default: '',
 				required: true,
-				placeholder: '2024-01-01',
-				description: 'Start date in YYYY-MM-DD format',
+				description: 'Start date for the search range (max 1 month range)',
 			},
 			{
 				displayName: 'Date To',
 				name: 'fechaHastaFin',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['finanzas'],
@@ -882,8 +926,7 @@ export class Fyo implements INodeType {
 				},
 				default: '',
 				required: true,
-				placeholder: '2024-12-31',
-				description: 'End date in YYYY-MM-DD format',
+				description: 'End date for the search range (max 1 month from start)',
 			},
 
 			// ====================
@@ -901,108 +944,13 @@ export class Fyo implements INodeType {
 				},
 				options: [
 					{
-						name: 'Get Settlements',
-						value: 'getLiquidacionesAfip',
-						description: 'Retrieve AFIP settlements',
-						action: 'Get settlements',
-					},
-					{
 						name: 'Get Waybills',
 						value: 'getCartaPorte',
 						description: 'Retrieve AFIP waybills (Carta de Porte)',
 						action: 'Get waybills',
 					},
 				],
-				default: 'getLiquidacionesAfip',
-			},
-
-			// ========== AFIP - LIQUIDACIONES ==========
-			{
-				displayName: 'Search By',
-				name: 'searchTypeAfipLiq',
-				type: 'options',
-				displayOptions: {
-					show: {
-						resource: ['afip'],
-						operation: ['getLiquidacionesAfip'],
-					},
-				},
-				options: [
-					{
-						name: 'Date Range',
-						value: 'byDates',
-					},
-					{
-						name: 'Receipt Number',
-						value: 'byReceiptNumber',
-					},
-					{
-						name: 'Contract Number',
-						value: 'byContractNumber',
-					},
-				],
-				default: 'byDates',
-			},
-			{
-				displayName: 'Date From',
-				name: 'fechaDesdeAfipLiq',
-				type: 'string',
-				displayOptions: {
-					show: {
-						resource: ['afip'],
-						operation: ['getLiquidacionesAfip'],
-						searchTypeAfipLiq: ['byDates'],
-					},
-				},
-				default: '',
-				required: true,
-				placeholder: '2024-01-01',
-				description: 'Start date in YYYY-MM-DD format',
-			},
-			{
-				displayName: 'Date To',
-				name: 'fechaHastaAfipLiq',
-				type: 'string',
-				displayOptions: {
-					show: {
-						resource: ['afip'],
-						operation: ['getLiquidacionesAfip'],
-						searchTypeAfipLiq: ['byDates'],
-					},
-				},
-				default: '',
-				placeholder: '2024-12-31',
-				description: 'End date in YYYY-MM-DD format (optional)',
-			},
-			{
-				displayName: 'Receipt Number',
-				name: 'numeroComprobanteAfip',
-				type: 'number',
-				displayOptions: {
-					show: {
-						resource: ['afip'],
-						operation: ['getLiquidacionesAfip'],
-						searchTypeAfipLiq: ['byReceiptNumber'],
-					},
-				},
-				default: '',
-				required: true,
-				description: 'The receipt number',
-			},
-			{
-				displayName: 'Contract Number',
-				name: 'numeroContratoAfip',
-				type: 'number',
-				displayOptions: {
-					show: {
-						resource: ['afip'],
-						operation: ['getLiquidacionesAfip'],
-						searchTypeAfipLiq: ['byContractNumber'],
-					},
-				},
-				default: '',
-				required: true,
-				description: 'The contract number',
+				default: 'getCartaPorte',
 			},
 
 			// ========== AFIP - CARTA DE PORTE ==========
@@ -1029,9 +977,9 @@ export class Fyo implements INodeType {
 				default: 'byDates',
 			},
 			{
-				displayName: 'Unload Date From',
+				displayName: 'Date From',
 				name: 'fechaDescargaDesde',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['afip'],
@@ -1041,13 +989,12 @@ export class Fyo implements INodeType {
 				},
 				default: '',
 				required: true,
-				placeholder: '2024-01-01',
-				description: 'Start date in YYYY-MM-DD format',
+				description: 'Start date for the search range (max 1 month range)',
 			},
 			{
-				displayName: 'Unload Date To',
+				displayName: 'Date To',
 				name: 'fechaDescargaHasta',
-				type: 'string',
+				type: 'dateTime',
 				displayOptions: {
 					show: {
 						resource: ['afip'],
@@ -1056,8 +1003,7 @@ export class Fyo implements INodeType {
 					},
 				},
 				default: '',
-				placeholder: '2024-12-31',
-				description: 'End date in YYYY-MM-DD format (optional)',
+				description: 'End date for the search range (optional, max 1 month from start)',
 			},
 			{
 				displayName: 'CTG Number',
@@ -1074,6 +1020,7 @@ export class Fyo implements INodeType {
 				required: true,
 				description: 'The CTG number',
 			},
+
 		],
 	};
 
@@ -1105,85 +1052,95 @@ export class Fyo implements INodeType {
 						endpoint = '/granos/contratos';
 						const searchType = this.getNodeParameter('searchTypeContratos', i) as string;
 						if (searchType === 'byDates') {
-							body.fechaContratoDesde = this.getNodeParameter('fechaContratoDesde', i) as string;
-							const fechaHasta = this.getNodeParameter('fechaContratoHasta', i) as string;
+							const fechaDesde = validateDate(this.getNodeParameter('fechaContratoDesde', i) as string, 'Contract Date From');
+							const fechaHasta = validateDate(this.getNodeParameter('fechaContratoHasta', i) as string, 'Contract Date To');
+							if (fechaHasta) validateDateRange(fechaDesde, fechaHasta);
+							body.fechaContratoDesde = fechaDesde;
 							if (fechaHasta) body.fechaContratoHasta = fechaHasta;
 						} else {
-							body.numeroContratoCorredor = this.getNodeParameter('numeroContratoCorredor', i) as number;
+							body.numeroContratoCorredor = validateRequiredNumber(this.getNodeParameter('numeroContratoCorredor', i) as number, 'Broker Contract Number');
 						}
 					} else if (operation === 'getLiquidaciones') {
 						endpoint = '/granos/liquidaciones';
 						const searchType = this.getNodeParameter('searchTypeLiquidaciones', i) as string;
 						if (searchType === 'byDates') {
-							body.fechaDesde = this.getNodeParameter('fechaDesdeLiq', i) as string;
-							const fechaHasta = this.getNodeParameter('fechaHastaLiq', i) as string;
+							const fechaDesde = validateDate(this.getNodeParameter('fechaDesdeLiq', i) as string, 'Date From');
+							const fechaHasta = validateDate(this.getNodeParameter('fechaHastaLiq', i) as string, 'Date To');
+							if (fechaHasta) validateDateRange(fechaDesde, fechaHasta);
+							body.fechaDesde = fechaDesde;
 							if (fechaHasta) body.fechaHasta = fechaHasta;
 						} else if (searchType === 'byContractNumber') {
-							body.numeroContratoCorredor = this.getNodeParameter('numeroContratoCorredorLiq', i) as number;
+							body.numeroContratoCorredor = validateRequiredNumber(this.getNodeParameter('numeroContratoCorredorLiq', i) as number, 'Broker Contract Number');
 						} else {
-							body.numeroComprobante = this.getNodeParameter('numeroComprobanteLiq', i) as number;
+							body.numeroComprobante = validateRequiredNumber(this.getNodeParameter('numeroComprobanteLiq', i) as number, 'Receipt Number');
 						}
 					} else if (operation === 'getFacturas') {
 						endpoint = '/granos/facturas';
 						const searchType = this.getNodeParameter('searchTypeFacturas', i) as string;
 						if (searchType === 'byDates') {
-							body.fechaDesde = this.getNodeParameter('fechaDesdeFact', i) as string;
-							const fechaHasta = this.getNodeParameter('fechaHastaFact', i) as string;
+							const fechaDesde = validateDate(this.getNodeParameter('fechaDesdeFact', i) as string, 'Date From');
+							const fechaHasta = validateDate(this.getNodeParameter('fechaHastaFact', i) as string, 'Date To');
+							if (fechaHasta) validateDateRange(fechaDesde, fechaHasta);
+							body.fechaDesde = fechaDesde;
 							if (fechaHasta) body.fechaHasta = fechaHasta;
 						} else if (searchType === 'byContractNumber') {
-							body.numeroContratoCorredor = this.getNodeParameter('numeroContratoCorredorFact', i) as number;
+							body.numeroContratoCorredor = validateRequiredNumber(this.getNodeParameter('numeroContratoCorredorFact', i) as number, 'Broker Contract Number');
 						} else {
-							body.numeroComprobante = this.getNodeParameter('numeroComprobanteFact', i) as number;
+							body.numeroComprobante = validateRequiredNumber(this.getNodeParameter('numeroComprobanteFact', i) as number, 'Receipt Number');
 						}
 					} else if (operation === 'getAplicaciones') {
 						endpoint = '/granos/aplicaciones';
 						const searchType = this.getNodeParameter('searchTypeAplicaciones', i) as string;
 						if (searchType === 'byDates') {
-							body.fechaAplicacionDesde = this.getNodeParameter('fechaAplicacionDesde', i) as string;
-							const fechaHasta = this.getNodeParameter('fechaAplicacionHasta', i) as string;
+							const fechaDesde = validateDate(this.getNodeParameter('fechaAplicacionDesde', i) as string, 'Application Date From');
+							const fechaHasta = validateDate(this.getNodeParameter('fechaAplicacionHasta', i) as string, 'Application Date To');
+							if (fechaHasta) validateDateRange(fechaDesde, fechaHasta);
+							body.fechaAplicacionDesde = fechaDesde;
 							if (fechaHasta) body.fechaAplicacionHasta = fechaHasta;
 						} else if (searchType === 'byContractNumber') {
-							body.numeroContratoCorredor = this.getNodeParameter('numeroContratoCorredorApl', i) as number;
+							body.numeroContratoCorredor = validateRequiredNumber(this.getNodeParameter('numeroContratoCorredorApl', i) as number, 'Broker Contract Number');
 						} else if (searchType === 'byCTG') {
-							body.CTG = this.getNodeParameter('CTG', i) as number;
-						} else {
-							body.numeroFijacion = this.getNodeParameter('numeroFijacionApl', i) as number;
+							body.CTG = validateRequiredNumber(this.getNodeParameter('CTG', i) as number, 'CTG Number');
 						}
 					} else if (operation === 'getFijaciones') {
 						endpoint = '/granos/fijaciones';
 						const searchType = this.getNodeParameter('searchTypeFijaciones', i) as string;
 						if (searchType === 'byDates') {
-							body.fechaFijacionDesde = this.getNodeParameter('fechaFijacionDesde', i) as string;
-							const fechaHasta = this.getNodeParameter('fechaFijacionHasta', i) as string;
+							const fechaDesde = validateDate(this.getNodeParameter('fechaFijacionDesde', i) as string, 'Fixing Date From');
+							const fechaHasta = validateDate(this.getNodeParameter('fechaFijacionHasta', i) as string, 'Fixing Date To');
+							if (fechaHasta) validateDateRange(fechaDesde, fechaHasta);
+							body.fechaFijacionDesde = fechaDesde;
 							if (fechaHasta) body.fechaFijacionHasta = fechaHasta;
 						} else if (searchType === 'byContractNumber') {
-							body.numeroContratoCorredor = this.getNodeParameter('numeroContratoCorredorFij', i) as number;
+							body.numeroContratoCorredor = validateRequiredNumber(this.getNodeParameter('numeroContratoCorredorFij', i) as number, 'Broker Contract Number');
 						} else {
-							body.numeroFijacion = this.getNodeParameter('numeroFijacion', i) as number;
+							body.numeroFijacion = validateRequiredNumber(this.getNodeParameter('numeroFijacion', i) as number, 'Fixing Number');
 						}
 					} else if (operation === 'getDescargas') {
 						endpoint = '/granos/descargas';
 						const searchType = this.getNodeParameter('searchTypeDescargas', i) as string;
 						if (searchType === 'byDates') {
-							body.fechaDesde = this.getNodeParameter('fechaDesdeDesc', i) as string;
-							const fechaHasta = this.getNodeParameter('fechaHastaDesc', i) as string;
+							const fechaDesde = validateDate(this.getNodeParameter('fechaDesdeDesc', i) as string, 'Date From');
+							const fechaHasta = validateDate(this.getNodeParameter('fechaHastaDesc', i) as string, 'Date To');
+							if (fechaHasta) validateDateRange(fechaDesde, fechaHasta);
+							body.fechaDesde = fechaDesde;
 							if (fechaHasta) body.fechaHasta = fechaHasta;
 						} else if (searchType === 'byCTG') {
-							body.numeroCTG = this.getNodeParameter('numeroCTG', i) as number;
-						} else {
-							body.numeroContratoCorredor = this.getNodeParameter('numeroContratoCorredorDesc', i) as number;
+							body.numeroCTG = validateRequiredNumber(this.getNodeParameter('numeroCTG', i) as number, 'CTG Number');
 						}
 					} else if (operation === 'getRetenciones') {
 						endpoint = '/granos/retenciones';
 						const searchType = this.getNodeParameter('searchTypeRetenciones', i) as string;
 						if (searchType === 'byDates') {
-							body.fechaDesde = this.getNodeParameter('fechaDesdeRet', i) as string;
-							const fechaHasta = this.getNodeParameter('fechaHastaRet', i) as string;
+							const fechaDesde = validateDate(this.getNodeParameter('fechaDesdeRet', i) as string, 'Date From');
+							const fechaHasta = validateDate(this.getNodeParameter('fechaHastaRet', i) as string, 'Date To');
+							if (fechaHasta) validateDateRange(fechaDesde, fechaHasta);
+							body.fechaDesde = fechaDesde;
 							if (fechaHasta) body.fechaHasta = fechaHasta;
 						} else if (searchType === 'byReceiptNumber') {
-							body.numeroComprobante = this.getNodeParameter('numeroComprobanteRet', i) as number;
+							body.numeroComprobante = validateRequiredNumber(this.getNodeParameter('numeroComprobanteRet', i) as number, 'Receipt Number');
 						} else {
-							body.numeroMinutaPago = this.getNodeParameter('numeroMinutaPago', i) as number;
+							body.numeroMinutaPago = validateRequiredNumber(this.getNodeParameter('numeroMinutaPago', i) as number, 'Payment Slip Number');
 						}
 					}
 				}
@@ -1207,11 +1164,15 @@ export class Fyo implements INodeType {
 						responseData = await this.helpers.httpRequest(options);
 					} else if (operation === 'getDetallesComprobante') {
 						endpoint = '/finanzas/extranet/detallescomprobante';
-						body.numeroComprobante = this.getNodeParameter('numeroComprobanteFin', i) as number;
+						body.numeroComprobante = validateRequiredNumber(this.getNodeParameter('numeroComprobanteFin', i) as number, 'Receipt Number');
 					} else if (operation === 'getMovimientos') {
 						endpoint = '/finanzas/extranet/movimientos';
-						body.fechaDesde = this.getNodeParameter('fechaDesdeFin', i) as string;
-						body.fechaHasta = this.getNodeParameter('fechaHastaFin', i) as string;
+						const fechaDesde = validateDate(this.getNodeParameter('fechaDesdeFin', i) as string, 'Date From');
+						const fechaHasta = validateDate(this.getNodeParameter('fechaHastaFin', i) as string, 'Date To');
+						validateDateRange(fechaDesde, fechaHasta);
+						body.fechaDesde = fechaDesde;
+						body.fechaHasta = fechaHasta;
+						body.pageSize = 1000;
 					}
 				}
 
@@ -1219,27 +1180,16 @@ export class Fyo implements INodeType {
 				// AFIP
 				// ====================
 				if (resource === 'afip') {
-					if (operation === 'getLiquidacionesAfip') {
-						endpoint = '/afip/liquidaciones';
-						const searchType = this.getNodeParameter('searchTypeAfipLiq', i) as string;
-						if (searchType === 'byDates') {
-							body.fechaDesde = this.getNodeParameter('fechaDesdeAfipLiq', i) as string;
-							const fechaHasta = this.getNodeParameter('fechaHastaAfipLiq', i) as string;
-							if (fechaHasta) body.fechaHasta = fechaHasta;
-						} else if (searchType === 'byReceiptNumber') {
-							body.numeroComprobante = this.getNodeParameter('numeroComprobanteAfip', i) as number;
-						} else {
-							body.numeroContrato = this.getNodeParameter('numeroContratoAfip', i) as number;
-						}
-					} else if (operation === 'getCartaPorte') {
+					if (operation === 'getCartaPorte') {
 						endpoint = '/afip/cartaporte';
 						const searchType = this.getNodeParameter('searchTypeCartaPorte', i) as string;
 						if (searchType === 'byDates') {
-							body.fechaDescargaDesde = this.getNodeParameter('fechaDescargaDesde', i) as string;
-							const fechaHasta = this.getNodeParameter('fechaDescargaHasta', i) as string;
+							const fechaDesde = validateDate(this.getNodeParameter('fechaDescargaDesde', i) as string, 'Unload Date From');
+							const fechaHasta = validateDate(this.getNodeParameter('fechaDescargaHasta', i) as string, 'Unload Date To');
+							body.fechaDescargaDesde = fechaDesde;
 							if (fechaHasta) body.fechaDescargaHasta = fechaHasta;
 						} else {
-							body.nroCTG = this.getNodeParameter('nroCTG', i) as number;
+							body.nroCTG = validateRequiredNumber(this.getNodeParameter('nroCTG', i) as number, 'CTG Number');
 						}
 					}
 				}
@@ -1259,12 +1209,37 @@ export class Fyo implements INodeType {
 					responseData = await this.helpers.httpRequest(options);
 				}
 
-				const executionData = this.helpers.constructExecutionMetaData(
-					this.helpers.returnJsonArray(responseData),
-					{ itemData: { item: i } },
-				);
+				// Extract data array from response structure
+				// Response format: [{ status: {...}, metadata: {...}, data: [...] }]
+				let dataItems: IDataObject[] = [];
 
-				returnData.push(...executionData);
+				if (Array.isArray(responseData)) {
+					// Response is an array (standard FYO API response)
+					const firstResponse = responseData[0] as IDataObject;
+					if (firstResponse && Array.isArray(firstResponse.data)) {
+						dataItems = firstResponse.data as IDataObject[];
+					} else if (firstResponse && !firstResponse.data) {
+						// Response might be a direct array of items
+						dataItems = responseData as IDataObject[];
+					}
+				} else if (responseData && typeof responseData === 'object') {
+					// Response is a single object
+					if (Array.isArray((responseData as IDataObject).data)) {
+						dataItems = (responseData as IDataObject).data as IDataObject[];
+					} else {
+						// Single item response
+						dataItems = [responseData as IDataObject];
+					}
+				}
+
+				// Return each data item as a separate n8n item
+				for (const dataItem of dataItems) {
+					const executionData = this.helpers.constructExecutionMetaData(
+						this.helpers.returnJsonArray(dataItem),
+						{ itemData: { item: i } },
+					);
+					returnData.push(...executionData);
+				}
 			} catch (error) {
 				if (this.continueOnFail()) {
 					const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';

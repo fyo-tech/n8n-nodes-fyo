@@ -81,7 +81,6 @@ export class FyoApi implements ICredentialType {
 		},
 	];
 
-	// Test credentials by attempting to obtain a token
 	test: ICredentialTestRequest = {
 		request: {
 			baseURL: '={{ $credentials.environment === "custom" ? $credentials.customUrl : ($credentials.environment === "demo" ? "https://demoapi.fyo.com" : "https://api.fyo.com") }}',
@@ -99,5 +98,15 @@ export class FyoApi implements ICredentialType {
 				response_type: 'token id_token',
 			},
 		},
+		rules: [
+			{
+				type: 'responseSuccessBody',
+				properties: {
+					key: 'access_token',
+					value: undefined,
+					message: 'Invalid credentials - no access token received',
+				},
+			},
+		],
 	};
 }

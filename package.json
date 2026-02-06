@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-fyo",
-  "version": "0.3.0-beta",
+  "version": "0.5.7",
   "description": "n8n community node for FYO API integration - Grains, Finance and AFIP operations",
   "keywords": [
     "n8n-community-node-package",
@@ -58,6 +58,7 @@
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^20.11.0",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.0.0",
     "eslint": "^8.56.0",
     "eslint-plugin-n8n-nodes-base": "^1.16.1",

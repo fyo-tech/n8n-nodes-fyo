@@ -43,7 +43,8 @@ To use this node, you need to configure the FYO API credentials:
 1. In n8n, go to **Credentials > New**
 2. Search for **FYO API**
 3. Fill in your credentials provided by FYO
-4. Click **Save**
+4. Click **Test** to verify the connection
+5. Click **Save**
 
 ## Operations
 
@@ -56,106 +57,103 @@ Retrieve grain contracts.
 
 | Search By | Parameters |
 |-----------|------------|
-| Date Range | `fechaContratoDesde` (required), `fechaContratoHasta` (optional) |
-| Contract Number | `numeroContratoCorredor` |
+| Date Range | Date From (required), Date To (optional) |
+| Broker Contract Number | Broker Contract Number |
 
-#### Get Settlements (Liquidaciones)
+#### Get Settlements
 Retrieve grain settlements.
 
 | Search By | Parameters |
 |-----------|------------|
-| Date Range | `fechaDesde` (required), `fechaHasta` (optional) |
-| Contract Number | `numeroContratoCorredor` |
-| Receipt Number | `numeroComprobante` |
+| Date Range | Date From (required), Date To (optional) |
+| Broker Contract Number | Broker Contract Number |
+| Receipt Number | Receipt Number |
 
-#### Get Invoices (Facturas)
+#### Get Invoices
 Retrieve grain invoices.
 
 | Search By | Parameters |
 |-----------|------------|
-| Date Range | `fechaDesde` (required), `fechaHasta` (optional) |
-| Contract Number | `numeroContratoCorredor` |
-| Receipt Number | `numeroComprobante` |
+| Date Range | Date From (required), Date To (optional) |
+| Broker Contract Number | Broker Contract Number |
+| Receipt Number | Receipt Number |
 
-#### Get Applications (Aplicaciones)
+#### Get Applications
 Retrieve grain applications.
 
 | Search By | Parameters |
 |-----------|------------|
-| Date Range | `fechaAplicacionDesde` (required), `fechaAplicacionHasta` (optional) |
-| Contract Number | `numeroContratoCorredor` |
-| CTG Number | `CTG` |
-| Fixing Number | `numeroFijacion` |
+| Date Range | Date From (required), Date To (optional) |
+| Broker Contract Number | Broker Contract Number |
+| CTG Number | CTG Number |
 
-#### Get Fixings (Fijaciones)
+#### Get Fixings
 Retrieve grain price fixings.
 
 | Search By | Parameters |
 |-----------|------------|
-| Date Range | `fechaFijacionDesde` (required), `fechaFijacionHasta` (optional) |
-| Contract Number | `numeroContratoCorredor` |
-| Fixing Number | `numeroFijacion` |
+| Date Range | Date From (required), Date To (optional) |
+| Broker Contract Number | Broker Contract Number |
+| Fixing Number | Fixing Number |
 
-#### Get Unloads (Descargas)
+#### Get Unloads
 Retrieve grain unloads.
 
 | Search By | Parameters |
 |-----------|------------|
-| Date Range | `fechaDesde` (required), `fechaHasta` (optional) |
-| CTG Number | `numeroCTG` |
-| Contract Number | `numeroContratoCorredor` |
+| Date Range | Date From (required), Date To (optional) |
+| CTG Number | CTG Number |
 
-#### Get Withholdings (Retenciones)
+#### Get Withholdings
 Retrieve tax withholdings.
 
 | Search By | Parameters |
 |-----------|------------|
-| Date Range | `fechaDesde` (required), `fechaHasta` (optional) |
-| Receipt Number | `numeroComprobante` |
-| Payment Slip Number | `numeroMinutaPago` |
+| Date Range | Date From (required), Date To (optional) |
+| Receipt Number | Receipt Number |
+| Payment Slip Number | Payment Slip Number |
 
 ### Finance Resource
 
 Operations for financial transactions.
 
-#### Get Receipt Types (Tipos de Comprobante)
+#### Get Receipt Types
 Retrieve available receipt types. This is a GET request with no parameters.
 
-#### Get Receipt Details (Detalles de Comprobante)
+#### Get Receipt Details
 Retrieve details for a specific receipt.
 
 | Parameter | Description |
 |-----------|-------------|
-| `numeroComprobante` | Receipt number (required) |
+| Receipt Number | Receipt number (required) |
 
-#### Get Transactions (Movimientos)
+#### Get Transactions
 Retrieve financial transactions.
 
 | Parameter | Description |
 |-----------|-------------|
-| `fechaDesde` | Start date (required) |
-| `fechaHasta` | End date (required) |
+| Date From | Start date (required) |
+| Date To | End date (required) |
 
 ### AFIP Resource
 
 Operations for AFIP (Argentine Federal Administration of Public Revenue) documentation.
 
-#### Get Settlements (Liquidaciones AFIP)
-Retrieve AFIP settlements.
+#### Get Waybills
+Retrieve AFIP waybills (Carta de Porte - transport documents).
 
 | Search By | Parameters |
 |-----------|------------|
-| Date Range | `fechaDesde` (required), `fechaHasta` (optional) |
-| Receipt Number | `numeroComprobante` |
-| Contract Number | `numeroContrato` |
+| Date Range | Date From (required), Date To (optional) |
+| CTG Number | CTG Number |
 
-#### Get Waybills (Carta de Porte)
-Retrieve AFIP waybills (transport documents).
+## Validation
 
-| Search By | Parameters |
-|-----------|------------|
-| Date Range | `fechaDescargaDesde` (required), `fechaDescargaHasta` (optional) |
-| CTG Number | `nroCTG` |
+The node includes built-in validation:
+
+- **Date validation**: Dates cannot be in the future and must be valid calendar dates
+- **Date range**: Maximum range is 31 days (1 month) when both dates are provided
+- **Numeric fields**: Required numeric fields (CTG Number, Broker Contract Number, etc.) must be greater than 0
 
 ## Authentication
 
