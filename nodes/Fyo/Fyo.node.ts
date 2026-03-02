@@ -105,14 +105,6 @@ function validateRequiredNumber(value: number | string, fieldName: string): numb
 	return num;
 }
 
-// Token cache: key = baseUrl+clientId+username, value = {token, expiresAt}
-interface TokenCacheEntry {
-	token: string;
-	expiresAt: number;
-}
-
-const tokenCache = new Map<string, TokenCacheEntry>();
-
 // Helper function to get the base URL from credentials
 function getBaseUrl(credentials: IDataObject): string {
 	const environment = credentials.environment as string;
@@ -124,53 +116,6 @@ function getBaseUrl(credentials: IDataObject): string {
 	return 'https://api.fyo.com';
 }
 
-// Helper function to get access token with caching
-async function getAccessToken(
-	executeFunctions: IExecuteFunctions,
-	credentials: IDataObject,
-): Promise<string> {
-	const baseUrl = getBaseUrl(credentials);
-	const cacheKey = `${baseUrl}:${credentials.clientId}:${credentials.username}`;
-	const now = Date.now();
-
-	// Check if we have a valid cached token (with 60s buffer before expiry)
-	const cached = tokenCache.get(cacheKey);
-	if (cached && cached.expiresAt > now + 60000) {
-		return cached.token;
-	}
-
-	const options: IHttpRequestOptions = {
-		method: 'POST',
-		url: `${baseUrl}/token`,
-		headers: {
-			'Content-Type': 'application/x-www-form-urlencoded',
-		},
-		body: new URLSearchParams({
-			client_id: credentials.clientId as string,
-			username: credentials.username as string,
-			password: credentials.password as string,
-			scope: credentials.scope as string,
-			grant_type: 'password',
-			response_type: 'token id_token',
-		}).toString(),
-	};
-
-	const response = await executeFunctions.helpers.httpRequest(options);
-
-	if (response.access_token) {
-		// Cache the token - use expires_in if available, default to 1 hour
-		const expiresIn = (response.expires_in as number) || 3600;
-		tokenCache.set(cacheKey, {
-			token: response.access_token as string,
-			expiresAt: now + expiresIn * 1000,
-		});
-		return response.access_token as string;
-	}
-
-	throw new NodeApiError(executeFunctions.getNode(), {
-		message: 'Failed to obtain access token from FYO API',
-	});
-}
 
 export class Fyo implements INodeType {
 	description: INodeTypeDescription = {
@@ -1032,9 +977,6 @@ export class Fyo implements INodeType {
 		const credentials = await this.getCredentials('fyoApi');
 		const baseUrl = getBaseUrl(credentials);
 
-		// Get access token
-		const accessToken = await getAccessToken(this, credentials);
-
 		for (let i = 0; i < items.length; i++) {
 			try {
 				const resource = this.getNodeParameter('resource', i) as string;
@@ -1155,13 +1097,9 @@ export class Fyo implements INodeType {
 						const options: IHttpRequestOptions = {
 							method: 'GET',
 							url: `${baseUrl}${endpoint}`,
-							headers: {
-								Authorization: `Bearer ${accessToken}`,
-								'Content-Type': 'application/json',
-							},
 							json: true,
 						};
-						responseData = await this.helpers.httpRequest(options);
+						responseData = await this.helpers.httpRequestWithAuthentication.call(this, 'fyoApi', options);
 					} else if (operation === 'getDetallesComprobante') {
 						endpoint = '/finanzas/extranet/detallescomprobante';
 						body.numeroComprobante = validateRequiredNumber(this.getNodeParameter('numeroComprobanteFin', i) as number, 'Receipt Number');
@@ -1200,13 +1138,12 @@ export class Fyo implements INodeType {
 						method: 'POST',
 						url: `${baseUrl}${endpoint}`,
 						headers: {
-							Authorization: `Bearer ${accessToken}`,
 							'Content-Type': 'application/json',
 						},
 						body,
 						json: true,
 					};
-					responseData = await this.helpers.httpRequest(options);
+					responseData = await this.helpers.httpRequestWithAuthentication.call(this, 'fyoApi', options);
 				}
 
 				// Extract data array from response structure

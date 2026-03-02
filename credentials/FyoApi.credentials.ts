@@ -1,6 +1,9 @@
 import type {
+	IAuthenticateGeneric,
+	ICredentialDataDecryptedObject,
 	ICredentialTestRequest,
 	ICredentialType,
+	IHttpRequestHelper,
 	INodeProperties,
 } from 'n8n-workflow';
 
@@ -9,6 +12,15 @@ export class FyoApi implements ICredentialType {
 	displayName = 'FYO API';
 	documentationUrl = 'https://api.fyo.com/docs';
 	properties: INodeProperties[] = [
+		{
+			displayName: 'Access Token',
+			name: 'accessToken',
+			type: 'hidden',
+			typeOptions: {
+				expirable: true,
+			},
+			default: '',
+		},
 		{
 			displayName: 'Client ID',
 			name: 'clientId',
@@ -81,32 +93,49 @@ export class FyoApi implements ICredentialType {
 		},
 	];
 
-	test: ICredentialTestRequest = {
-		request: {
-			baseURL: '={{ $credentials.environment === "custom" ? $credentials.customUrl : ($credentials.environment === "demo" ? "https://demoapi.fyo.com" : "https://api.fyo.com") }}',
-			url: '/token',
+	async preAuthentication(this: IHttpRequestHelper, credentials: ICredentialDataDecryptedObject) {
+		const environment = credentials.environment as string;
+		const baseUrl =
+			environment === 'custom'
+				? (credentials.customUrl as string)
+				: environment === 'demo'
+					? 'https://demoapi.fyo.com'
+					: 'https://api.fyo.com';
+
+		const response = (await this.helpers.httpRequest({
 			method: 'POST',
+			url: `${baseUrl}/token`,
 			headers: {
 				'Content-Type': 'application/x-www-form-urlencoded',
 			},
-			body: {
-				client_id: '={{$credentials.clientId}}',
-				username: '={{$credentials.username}}',
-				password: '={{$credentials.password}}',
-				scope: '={{$credentials.scope}}',
+			body: new URLSearchParams({
+				client_id: credentials.clientId as string,
+				username: credentials.username as string,
+				password: credentials.password as string,
+				scope: credentials.scope as string,
 				grant_type: 'password',
 				response_type: 'token id_token',
+			}).toString(),
+		})) as { access_token: string };
+
+		return { accessToken: response.access_token };
+	}
+
+	authenticate: IAuthenticateGeneric = {
+		type: 'generic',
+		properties: {
+			headers: {
+				Authorization: '=Bearer {{$credentials.accessToken}}',
 			},
 		},
-		rules: [
-			{
-				type: 'responseSuccessBody',
-				properties: {
-					key: 'access_token',
-					value: undefined,
-					message: 'Invalid credentials - no access token received',
-				},
-			},
-		],
+	};
+
+	test: ICredentialTestRequest = {
+		request: {
+			baseURL:
+				'={{ $credentials.environment === "custom" ? $credentials.customUrl : ($credentials.environment === "demo" ? "https://demoapi.fyo.com" : "https://api.fyo.com") }}',
+			url: '/finanzas/extranet/tiposcomprobante',
+			method: 'GET',
+		},
 	};
 }
