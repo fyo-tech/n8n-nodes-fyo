@@ -5,11 +5,12 @@ import type {
 	INodeTypeDescription,
 	IHttpRequestOptions,
 	IDataObject,
+	INode,
 } from 'n8n-workflow';
-import { NodeApiError } from 'n8n-workflow';
+import { NodeApiError, NodeOperationError } from 'n8n-workflow';
 
 // Helper function to convert dateTime to YYYY-MM-DD format
-function formatDateForApi(dateValue: string): string {
+function formatDateForApi(node: INode, dateValue: string): string {
 	if (!dateValue) return '';
 
 	// If already in YYYY-MM-DD format, return as is
@@ -20,7 +21,7 @@ function formatDateForApi(dateValue: string): string {
 	// Parse ISO datetime or other formats
 	const date = new Date(dateValue);
 	if (isNaN(date.getTime())) {
-		throw new Error(`Invalid date value: "${dateValue}"`);
+		throw new NodeOperationError(node, `Invalid date value: "${dateValue}"`);
 	}
 
 	const year = date.getFullYear();
@@ -31,10 +32,10 @@ function formatDateForApi(dateValue: string): string {
 }
 
 // Helper function to validate date existence
-function validateDate(dateString: string, fieldName: string): string {
+function validateDate(node: INode, dateString: string, fieldName: string): string {
 	if (!dateString) return '';
 
-	const formatted = formatDateForApi(dateString);
+	const formatted = formatDateForApi(node, dateString);
 	const [year, month, day] = formatted.split('-').map(Number);
 
 	// Check if the date actually exists
@@ -45,7 +46,8 @@ function validateDate(dateString: string, fieldName: string): string {
 		date.getDate() !== day
 	) {
 		const lastDayOfMonth = new Date(year, month, 0).getDate();
-		throw new Error(
+		throw new NodeOperationError(
+			node,
 			`Invalid date "${fieldName}": "${formatted}" does not exist. ` +
 			`${getMonthName(month)} ${year} has ${lastDayOfMonth} days.`
 		);
@@ -55,7 +57,8 @@ function validateDate(dateString: string, fieldName: string): string {
 	const today = new Date();
 	today.setHours(0, 0, 0, 0);
 	if (date > today) {
-		throw new Error(
+		throw new NodeOperationError(
+			node,
 			`Invalid date "${fieldName}": "${formatted}" cannot be greater than today's date.`
 		);
 	}
@@ -64,14 +67,14 @@ function validateDate(dateString: string, fieldName: string): string {
 }
 
 // Helper function to validate date range (max 1 month)
-function validateDateRange(dateFrom: string, dateTo: string): void {
+function validateDateRange(node: INode, dateFrom: string, dateTo: string): void {
 	if (!dateFrom || !dateTo) return;
 
 	const from = new Date(dateFrom);
 	const to = new Date(dateTo);
 
 	if (to < from) {
-		throw new Error(`Date range invalid: "Date To" (${dateTo}) cannot be before "Date From" (${dateFrom})`);
+		throw new NodeOperationError(node, `Date range invalid: "Date To" (${dateTo}) cannot be before "Date From" (${dateFrom})`);
 	}
 
 	// Calculate difference in days
@@ -80,7 +83,8 @@ function validateDateRange(dateFrom: string, dateTo: string): void {
 
 	// Max 31 days (approximately 1 month)
 	if (diffDays > 31) {
-		throw new Error(
+		throw new NodeOperationError(
+			node,
 			`Date range exceeds maximum allowed (1 month). ` +
 			`From "${dateFrom}" to "${dateTo}" is ${Math.ceil(diffDays)} days. ` +
 			`Please reduce the date range to 31 days or less.`
@@ -97,10 +101,10 @@ function getMonthName(month: number): string {
 }
 
 // Helper function to validate required numeric fields
-function validateRequiredNumber(value: number | string, fieldName: string): number {
+function validateRequiredNumber(node: INode, value: number | string, fieldName: string): number {
 	const num = typeof value === 'string' ? parseInt(value, 10) : value;
 	if (!num || num <= 0 || isNaN(num)) {
-		throw new Error(`${fieldName} must be a valid number greater than 0`);
+		throw new NodeOperationError(node, `${fieldName} must be a valid number greater than 0`);
 	}
 	return num;
 }
@@ -974,6 +978,7 @@ export class Fyo implements INodeType {
 		const returnData: INodeExecutionData[] = [];
 
 		// Get credentials
+		const node = this.getNode();
 		const credentials = await this.getCredentials('fyoApi');
 		const baseUrl = getBaseUrl(credentials);
 
@@ -994,95 +999,95 @@ export class Fyo implements INodeType {
 						endpoint = '/granos/contratos';
 						const searchType = this.getNodeParameter('searchTypeContratos', i) as string;
 						if (searchType === 'byDates') {
-							const fechaDesde = validateDate(this.getNodeParameter('fechaContratoDesde', i) as string, 'Contract Date From');
-							const fechaHasta = validateDate(this.getNodeParameter('fechaContratoHasta', i) as string, 'Contract Date To');
-							if (fechaHasta) validateDateRange(fechaDesde, fechaHasta);
+							const fechaDesde = validateDate(node, this.getNodeParameter('fechaContratoDesde', i) as string, 'Contract Date From');
+							const fechaHasta = validateDate(node, this.getNodeParameter('fechaContratoHasta', i) as string, 'Contract Date To');
+							if (fechaHasta) validateDateRange(node, fechaDesde, fechaHasta);
 							body.fechaContratoDesde = fechaDesde;
 							if (fechaHasta) body.fechaContratoHasta = fechaHasta;
 						} else {
-							body.numeroContratoCorredor = validateRequiredNumber(this.getNodeParameter('numeroContratoCorredor', i) as number, 'Broker Contract Number');
+							body.numeroContratoCorredor = validateRequiredNumber(node, this.getNodeParameter('numeroContratoCorredor', i) as number, 'Broker Contract Number');
 						}
 					} else if (operation === 'getLiquidaciones') {
 						endpoint = '/granos/liquidaciones';
 						const searchType = this.getNodeParameter('searchTypeLiquidaciones', i) as string;
 						if (searchType === 'byDates') {
-							const fechaDesde = validateDate(this.getNodeParameter('fechaDesdeLiq', i) as string, 'Date From');
-							const fechaHasta = validateDate(this.getNodeParameter('fechaHastaLiq', i) as string, 'Date To');
-							if (fechaHasta) validateDateRange(fechaDesde, fechaHasta);
+							const fechaDesde = validateDate(node, this.getNodeParameter('fechaDesdeLiq', i) as string, 'Date From');
+							const fechaHasta = validateDate(node, this.getNodeParameter('fechaHastaLiq', i) as string, 'Date To');
+							if (fechaHasta) validateDateRange(node, fechaDesde, fechaHasta);
 							body.fechaDesde = fechaDesde;
 							if (fechaHasta) body.fechaHasta = fechaHasta;
 						} else if (searchType === 'byContractNumber') {
-							body.numeroContratoCorredor = validateRequiredNumber(this.getNodeParameter('numeroContratoCorredorLiq', i) as number, 'Broker Contract Number');
+							body.numeroContratoCorredor = validateRequiredNumber(node, this.getNodeParameter('numeroContratoCorredorLiq', i) as number, 'Broker Contract Number');
 						} else {
-							body.numeroComprobante = validateRequiredNumber(this.getNodeParameter('numeroComprobanteLiq', i) as number, 'Receipt Number');
+							body.numeroComprobante = validateRequiredNumber(node, this.getNodeParameter('numeroComprobanteLiq', i) as number, 'Receipt Number');
 						}
 					} else if (operation === 'getFacturas') {
 						endpoint = '/granos/facturas';
 						const searchType = this.getNodeParameter('searchTypeFacturas', i) as string;
 						if (searchType === 'byDates') {
-							const fechaDesde = validateDate(this.getNodeParameter('fechaDesdeFact', i) as string, 'Date From');
-							const fechaHasta = validateDate(this.getNodeParameter('fechaHastaFact', i) as string, 'Date To');
-							if (fechaHasta) validateDateRange(fechaDesde, fechaHasta);
+							const fechaDesde = validateDate(node, this.getNodeParameter('fechaDesdeFact', i) as string, 'Date From');
+							const fechaHasta = validateDate(node, this.getNodeParameter('fechaHastaFact', i) as string, 'Date To');
+							if (fechaHasta) validateDateRange(node, fechaDesde, fechaHasta);
 							body.fechaDesde = fechaDesde;
 							if (fechaHasta) body.fechaHasta = fechaHasta;
 						} else if (searchType === 'byContractNumber') {
-							body.numeroContratoCorredor = validateRequiredNumber(this.getNodeParameter('numeroContratoCorredorFact', i) as number, 'Broker Contract Number');
+							body.numeroContratoCorredor = validateRequiredNumber(node, this.getNodeParameter('numeroContratoCorredorFact', i) as number, 'Broker Contract Number');
 						} else {
-							body.numeroComprobante = validateRequiredNumber(this.getNodeParameter('numeroComprobanteFact', i) as number, 'Receipt Number');
+							body.numeroComprobante = validateRequiredNumber(node, this.getNodeParameter('numeroComprobanteFact', i) as number, 'Receipt Number');
 						}
 					} else if (operation === 'getAplicaciones') {
 						endpoint = '/granos/aplicaciones';
 						const searchType = this.getNodeParameter('searchTypeAplicaciones', i) as string;
 						if (searchType === 'byDates') {
-							const fechaDesde = validateDate(this.getNodeParameter('fechaAplicacionDesde', i) as string, 'Application Date From');
-							const fechaHasta = validateDate(this.getNodeParameter('fechaAplicacionHasta', i) as string, 'Application Date To');
-							if (fechaHasta) validateDateRange(fechaDesde, fechaHasta);
+							const fechaDesde = validateDate(node, this.getNodeParameter('fechaAplicacionDesde', i) as string, 'Application Date From');
+							const fechaHasta = validateDate(node, this.getNodeParameter('fechaAplicacionHasta', i) as string, 'Application Date To');
+							if (fechaHasta) validateDateRange(node, fechaDesde, fechaHasta);
 							body.fechaAplicacionDesde = fechaDesde;
 							if (fechaHasta) body.fechaAplicacionHasta = fechaHasta;
 						} else if (searchType === 'byContractNumber') {
-							body.numeroContratoCorredor = validateRequiredNumber(this.getNodeParameter('numeroContratoCorredorApl', i) as number, 'Broker Contract Number');
+							body.numeroContratoCorredor = validateRequiredNumber(node, this.getNodeParameter('numeroContratoCorredorApl', i) as number, 'Broker Contract Number');
 						} else if (searchType === 'byCTG') {
-							body.CTG = validateRequiredNumber(this.getNodeParameter('CTG', i) as number, 'CTG Number');
+							body.CTG = validateRequiredNumber(node, this.getNodeParameter('CTG', i) as number, 'CTG Number');
 						}
 					} else if (operation === 'getFijaciones') {
 						endpoint = '/granos/fijaciones';
 						const searchType = this.getNodeParameter('searchTypeFijaciones', i) as string;
 						if (searchType === 'byDates') {
-							const fechaDesde = validateDate(this.getNodeParameter('fechaFijacionDesde', i) as string, 'Fixing Date From');
-							const fechaHasta = validateDate(this.getNodeParameter('fechaFijacionHasta', i) as string, 'Fixing Date To');
-							if (fechaHasta) validateDateRange(fechaDesde, fechaHasta);
+							const fechaDesde = validateDate(node, this.getNodeParameter('fechaFijacionDesde', i) as string, 'Fixing Date From');
+							const fechaHasta = validateDate(node, this.getNodeParameter('fechaFijacionHasta', i) as string, 'Fixing Date To');
+							if (fechaHasta) validateDateRange(node, fechaDesde, fechaHasta);
 							body.fechaFijacionDesde = fechaDesde;
 							if (fechaHasta) body.fechaFijacionHasta = fechaHasta;
 						} else if (searchType === 'byContractNumber') {
-							body.numeroContratoCorredor = validateRequiredNumber(this.getNodeParameter('numeroContratoCorredorFij', i) as number, 'Broker Contract Number');
+							body.numeroContratoCorredor = validateRequiredNumber(node, this.getNodeParameter('numeroContratoCorredorFij', i) as number, 'Broker Contract Number');
 						} else {
-							body.numeroFijacion = validateRequiredNumber(this.getNodeParameter('numeroFijacion', i) as number, 'Fixing Number');
+							body.numeroFijacion = validateRequiredNumber(node, this.getNodeParameter('numeroFijacion', i) as number, 'Fixing Number');
 						}
 					} else if (operation === 'getDescargas') {
 						endpoint = '/granos/descargas';
 						const searchType = this.getNodeParameter('searchTypeDescargas', i) as string;
 						if (searchType === 'byDates') {
-							const fechaDesde = validateDate(this.getNodeParameter('fechaDesdeDesc', i) as string, 'Date From');
-							const fechaHasta = validateDate(this.getNodeParameter('fechaHastaDesc', i) as string, 'Date To');
-							if (fechaHasta) validateDateRange(fechaDesde, fechaHasta);
+							const fechaDesde = validateDate(node, this.getNodeParameter('fechaDesdeDesc', i) as string, 'Date From');
+							const fechaHasta = validateDate(node, this.getNodeParameter('fechaHastaDesc', i) as string, 'Date To');
+							if (fechaHasta) validateDateRange(node, fechaDesde, fechaHasta);
 							body.fechaDesde = fechaDesde;
 							if (fechaHasta) body.fechaHasta = fechaHasta;
 						} else if (searchType === 'byCTG') {
-							body.numeroCTG = validateRequiredNumber(this.getNodeParameter('numeroCTG', i) as number, 'CTG Number');
+							body.numeroCTG = validateRequiredNumber(node, this.getNodeParameter('numeroCTG', i) as number, 'CTG Number');
 						}
 					} else if (operation === 'getRetenciones') {
 						endpoint = '/granos/retenciones';
 						const searchType = this.getNodeParameter('searchTypeRetenciones', i) as string;
 						if (searchType === 'byDates') {
-							const fechaDesde = validateDate(this.getNodeParameter('fechaDesdeRet', i) as string, 'Date From');
-							const fechaHasta = validateDate(this.getNodeParameter('fechaHastaRet', i) as string, 'Date To');
-							if (fechaHasta) validateDateRange(fechaDesde, fechaHasta);
+							const fechaDesde = validateDate(node, this.getNodeParameter('fechaDesdeRet', i) as string, 'Date From');
+							const fechaHasta = validateDate(node, this.getNodeParameter('fechaHastaRet', i) as string, 'Date To');
+							if (fechaHasta) validateDateRange(node, fechaDesde, fechaHasta);
 							body.fechaDesde = fechaDesde;
 							if (fechaHasta) body.fechaHasta = fechaHasta;
 						} else if (searchType === 'byReceiptNumber') {
-							body.numeroComprobante = validateRequiredNumber(this.getNodeParameter('numeroComprobanteRet', i) as number, 'Receipt Number');
+							body.numeroComprobante = validateRequiredNumber(node, this.getNodeParameter('numeroComprobanteRet', i) as number, 'Receipt Number');
 						} else {
-							body.numeroMinutaPago = validateRequiredNumber(this.getNodeParameter('numeroMinutaPago', i) as number, 'Payment Slip Number');
+							body.numeroMinutaPago = validateRequiredNumber(node, this.getNodeParameter('numeroMinutaPago', i) as number, 'Payment Slip Number');
 						}
 					}
 				}
@@ -1102,12 +1107,12 @@ export class Fyo implements INodeType {
 						responseData = await this.helpers.httpRequestWithAuthentication.call(this, 'fyoApi', options);
 					} else if (operation === 'getDetallesComprobante') {
 						endpoint = '/finanzas/extranet/detallescomprobante';
-						body.numeroComprobante = validateRequiredNumber(this.getNodeParameter('numeroComprobanteFin', i) as number, 'Receipt Number');
+						body.numeroComprobante = validateRequiredNumber(node, this.getNodeParameter('numeroComprobanteFin', i) as number, 'Receipt Number');
 					} else if (operation === 'getMovimientos') {
 						endpoint = '/finanzas/extranet/movimientos';
-						const fechaDesde = validateDate(this.getNodeParameter('fechaDesdeFin', i) as string, 'Date From');
-						const fechaHasta = validateDate(this.getNodeParameter('fechaHastaFin', i) as string, 'Date To');
-						validateDateRange(fechaDesde, fechaHasta);
+						const fechaDesde = validateDate(node, this.getNodeParameter('fechaDesdeFin', i) as string, 'Date From');
+						const fechaHasta = validateDate(node, this.getNodeParameter('fechaHastaFin', i) as string, 'Date To');
+						validateDateRange(node, fechaDesde, fechaHasta);
 						body.fechaDesde = fechaDesde;
 						body.fechaHasta = fechaHasta;
 						body.pageSize = 1000;
@@ -1122,12 +1127,12 @@ export class Fyo implements INodeType {
 						endpoint = '/afip/cartaporte';
 						const searchType = this.getNodeParameter('searchTypeCartaPorte', i) as string;
 						if (searchType === 'byDates') {
-							const fechaDesde = validateDate(this.getNodeParameter('fechaDescargaDesde', i) as string, 'Unload Date From');
-							const fechaHasta = validateDate(this.getNodeParameter('fechaDescargaHasta', i) as string, 'Unload Date To');
+							const fechaDesde = validateDate(node, this.getNodeParameter('fechaDescargaDesde', i) as string, 'Unload Date From');
+							const fechaHasta = validateDate(node, this.getNodeParameter('fechaDescargaHasta', i) as string, 'Unload Date To');
 							body.fechaDescargaDesde = fechaDesde;
 							if (fechaHasta) body.fechaDescargaHasta = fechaHasta;
 						} else {
-							body.nroCTG = validateRequiredNumber(this.getNodeParameter('nroCTG', i) as number, 'CTG Number');
+							body.nroCTG = validateRequiredNumber(node, this.getNodeParameter('nroCTG', i) as number, 'CTG Number');
 						}
 					}
 				}
