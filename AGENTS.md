@@ -6,7 +6,7 @@ Instructions for AI coding agents working on this repository.
 
 n8n community node package for [FYO API](https://api.fyo.com/docs) integration (grain trading, finance, AFIP — Argentina).
 
-- Package: `n8n-nodes-fyo` v0.5.7
+- Package: `n8n-nodes-fyo` v0.6.0
 - Repo: https://github.com/fyo-tech/n8n-nodes-fyo
 - Node manager: npm (packageManager: npm@10.2.4, Node >=20)
 
@@ -37,12 +37,12 @@ Always run `npm run build` after editing `.ts` files to verify the TypeScript co
 
 The FYO API uses **OAuth2 Resource Owner Password Credentials Grant (Password Grant)**. This is a hard constraint:
 
-- **n8n's built-in `oAuth2Api` credential does NOT support password grant.** This was confirmed by the n8n team. Supported grant types in `oAuth2Api` are only: `authorizationCode`, `clientCredentials`, `pkce`.
-- Therefore `httpRequestWithAuthentication()` cannot be used with an `extends = ['oAuth2Api']` credential for this API.
-- The correct approach is the current one: a **custom credential type** (`FyoApi`) that captures `clientId`, `username`, `password`, `scope`, `environment`.
-- Token fetching is handled manually in `Fyo.node.ts` via `getAccessToken()`, which POSTs to `/token` and caches the result in a module-level `Map` with expiry tracking (60s buffer).
+- **n8n's built-in `oAuth2Api` credential does NOT support password grant.** Confirmed by the n8n team. Supported grant types in `oAuth2Api` are only: `authorizationCode`, `clientCredentials`, `pkce`.
+- The credential (`FyoApi`) is a **custom type** with `preAuthentication` — it fetches the token via POST `/token` and stores it in an `accessToken` field with `typeOptions: { expirable: true }`. n8n manages token lifecycle automatically.
+- The node calls `this.helpers.httpRequestWithAuthentication.call(this, 'fyoApi', options)`. The credential's `authenticate` property injects the `Authorization: Bearer` header.
+- This follows the **Metabase credential pattern** from n8n's official examples.
 
-Do NOT attempt to refactor this to `extends = ['oAuth2Api']` — it will not work for password grant.
+Do NOT add manual token caching or call `/token` from the node — the credential handles it. Do NOT attempt to refactor to `extends = ['oAuth2Api']` — it will not work for password grant.
 
 ### Resources & Operations
 
@@ -84,6 +84,5 @@ Do NOT attempt to refactor this to `extends = ['oAuth2Api']` — it will not wor
 
 ## Known Limitations / Design Decisions
 
-- `tokenCache` is a module-level `Map` — it persists across executions within the same process. Cache key is `baseUrl:clientId:username` to avoid cross-credential contamination.
 - `pageSize: 1000` is hardcoded in `getMovimientos` — matches FYO API's max.
-- `displayName: 'FyO'` uses capital O per brand guidelines.
+- `displayName: 'fyo'` — all lowercase per official brand guidelines.
