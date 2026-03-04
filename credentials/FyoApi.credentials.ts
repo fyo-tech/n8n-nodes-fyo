@@ -9,7 +9,7 @@ import type {
 
 export class FyoApi implements ICredentialType {
 	name = 'fyoApi';
-	displayName = 'FYO API';
+	displayName = 'fyo API';
 	documentationUrl = 'https://api.fyo.com/docs';
 	properties: INodeProperties[] = [
 		{

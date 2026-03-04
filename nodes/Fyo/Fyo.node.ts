@@ -123,15 +123,15 @@ function getBaseUrl(credentials: IDataObject): string {
 
 export class Fyo implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'FyO',
+		displayName: 'fyo',
 		name: 'fyo',
 		icon: 'file:fyo.svg',
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"]}}',
-		description: 'Interact with FYO API',
+		description: 'Interact with fyo API',
 		defaults: {
-			name: 'FyO',
+			name: 'fyo',
 		},
 		inputs: ['main'],
 		outputs: ['main'],
