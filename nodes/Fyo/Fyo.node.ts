@@ -158,7 +158,7 @@ export class Fyo implements INodeType {
 						value: 'finanzas',
 					},
 					{
-						name: 'AFIP',
+						name: 'ARCA',
 						value: 'afip',
 					},
 				],
@@ -895,7 +895,7 @@ export class Fyo implements INodeType {
 					{
 						name: 'Get Waybills',
 						value: 'getCartaPorte',
-						description: 'Retrieve AFIP waybills (Carta de Porte)',
+						description: 'Retrieve ARCA waybills (Carta de Porte)',
 						action: 'Get waybills',
 					},
 				],
