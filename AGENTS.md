@@ -6,7 +6,7 @@ Instructions for AI coding agents working on this repository.
 
 n8n community node package for [FYO API](https://api.fyo.com/docs) integration (grain trading, finance, AFIP — Argentina).
 
-- Package: `n8n-nodes-fyo` v0.6.0
+- Package: `n8n-nodes-fyo` v0.6.1
 - Repo: https://github.com/fyo-tech/n8n-nodes-fyo
 - Node manager: npm (packageManager: npm@10.2.4, Node >=20)
 
@@ -50,7 +50,7 @@ Do NOT add manual token caching or call `/token` from the node — the credentia
 |-----------|-----------|
 | `granos`  | getContratos, getLiquidaciones, getFacturas, getAplicaciones, getFijaciones, getDescargas, getRetenciones |
 | `finanzas`| getTiposComprobante (GET), getDetallesComprobante, getMovimientos |
-| `afip`    | getCartaPorte |
+| `afip` (UI: ARCA) | getCartaPorte |
 
 ### Environments
 

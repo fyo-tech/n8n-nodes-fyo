@@ -1,6 +1,6 @@
 # n8n-nodes-fyo
 
-This is an n8n community node for integrating with the [FYO API](https://www.fyo.com). It provides access to grain trading operations, financial transactions, and AFIP (Argentine tax authority) documentation.
+This is an n8n community node for integrating with the [FYO API](https://www.fyo.com). It provides access to grain trading operations, financial transactions, and ARCA (Argentine tax authority) documentation.
 
 [n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/reference/license/) workflow automation platform.
 
@@ -135,12 +135,12 @@ Retrieve financial transactions.
 | Date From | Start date (required) |
 | Date To | End date (required) |
 
-### AFIP Resource
+### ARCA Resource
 
-Operations for AFIP (Argentine Federal Administration of Public Revenue) documentation.
+Operations for ARCA (Argentine Federal Administration of Public Revenue) documentation.
 
 #### Get Waybills
-Retrieve AFIP waybills (Carta de Porte - transport documents).
+Retrieve ARCA waybills (Carta de Porte - transport documents).
 
 | Search By | Parameters |
 |-----------|------------|
