@@ -126,6 +126,7 @@ export class FyoApi implements ICredentialType {
 		properties: {
 			headers: {
 				Authorization: '=Bearer {{$credentials.accessToken}}',
+				'X-Request-Source': 'n8n-nodes-fyo',
 			},
 		},
 	};
