@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-fyo",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "n8n community node for fyo API integration - Grains, Finance and ARCA operations",
   "keywords": [
     "n8n-community-node-package",
@@ -30,7 +30,7 @@
     "node": ">=20.0.0"
   },
   "packageManager": "npm@10.2.4",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
     "build": "tsc && gulp build:icons",
     "dev": "tsc --watch",
@@ -40,19 +40,15 @@
     "prepublishOnly": "npm run build"
   },
   "files": [
-    "credentials/**/*.js",
-    "credentials/**/*.d.ts",
-    "nodes/**/*.js",
-    "nodes/**/*.d.ts",
-    "nodes/**/*.svg"
+    "dist/**"
   ],
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [
-      "credentials/FyoApi.credentials.js"
+      "dist/credentials/FyoApi.credentials.js"
     ],
     "nodes": [
-      "nodes/Fyo/Fyo.node.js"
+      "dist/nodes/Fyo/Fyo.node.js"
     ]
   },
   "devDependencies": {
